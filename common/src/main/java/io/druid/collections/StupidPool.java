@@ -110,6 +110,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
   private ObjectResourceHolder makeObjectWithHandler()
   {
     T object = generator.get();
+
     ObjectId objectId = new ObjectId();
     ObjectLeakNotifier notifier = new ObjectLeakNotifier(this);
     // Using objectId as referent for Cleaner, because if the object itself (e. g. ByteBuffer) is leaked after taken

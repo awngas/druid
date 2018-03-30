@@ -35,7 +35,7 @@ import java.util.ServiceLoader;
  */
 public class Main
 {
-  static {
+  static { // 使用java spi服务进行不同配置加载
     ServiceLoader<PropertyChecker> serviceLoader = ServiceLoader.load(PropertyChecker.class);
     for (PropertyChecker propertyChecker : serviceLoader) {
       propertyChecker.checkProperties(System.getProperties());

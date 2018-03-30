@@ -20,7 +20,7 @@
 package io.druid.cli;
 
 import java.util.Properties;
-
+/** 实现了PropertyChecker接口的子类 */
 public class Log4JShutdownPropertyChecker implements PropertyChecker
 {
   @Override

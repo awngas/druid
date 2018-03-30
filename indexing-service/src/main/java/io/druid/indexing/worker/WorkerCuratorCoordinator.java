@@ -42,6 +42,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
+ * CuratorCoordinator提供了使用ccccc的方法。持久化ZK路径是在{@link #start()}上创建的。
  * The CuratorCoordinator provides methods to use Curator. Persistent ZK paths are created on {@link #start()}.
  */
 public class WorkerCuratorCoordinator
