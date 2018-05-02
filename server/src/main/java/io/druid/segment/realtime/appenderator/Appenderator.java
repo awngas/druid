@@ -23,6 +23,7 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.druid.data.input.Committer;
 import io.druid.data.input.InputRow;
+import io.druid.java.util.common.parsers.ParseException;
 import io.druid.query.QuerySegmentWalker;
 import io.druid.segment.incremental.IndexSizeExceededException;
 
@@ -194,11 +195,16 @@ public interface Appenderator extends QuerySegmentWalker, Closeable
    *
    * @param identifiers list of segments to push
    * @param committer   a committer associated with all data that has been added so far
+   * @param useUniquePath true if the segment should be written to a path with a unique identifier
    *
    * @return future that resolves when all segments have been pushed. The segment list will be the list of segments
    * that have been pushed and the commit metadata from the Committer.
    */
-  ListenableFuture<SegmentsAndMetadata> push(Collection<SegmentIdentifier> identifiers, @Nullable Committer committer);
+  ListenableFuture<SegmentsAndMetadata> push(
+      Collection<SegmentIdentifier> identifiers,
+      @Nullable Committer committer,
+      boolean useUniquePath
+  );
 
   /**
    * Stop any currently-running processing and clean up after ourselves. This allows currently running persists and pushes
@@ -228,11 +234,20 @@ public interface Appenderator extends QuerySegmentWalker, Closeable
     private final int numRowsInSegment;
     private final boolean isPersistRequired;
 
-    AppenderatorAddResult(SegmentIdentifier identifier, int numRowsInSegment, boolean isPersistRequired)
+    @Nullable
+    private final ParseException parseException;
+
+    AppenderatorAddResult(
+        SegmentIdentifier identifier,
+        int numRowsInSegment,
+        boolean isPersistRequired,
+        @Nullable ParseException parseException
+    )
     {
       this.segmentIdentifier = identifier;
       this.numRowsInSegment = numRowsInSegment;
       this.isPersistRequired = isPersistRequired;
+      this.parseException = parseException;
     }
 
     SegmentIdentifier getSegmentIdentifier()
@@ -248,6 +263,12 @@ public interface Appenderator extends QuerySegmentWalker, Closeable
     boolean isPersistRequired()
     {
       return isPersistRequired;
+    }
+
+    @Nullable
+    public ParseException getParseException()
+    {
+      return parseException;
     }
   }
 }

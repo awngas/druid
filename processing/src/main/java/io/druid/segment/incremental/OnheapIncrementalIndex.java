@@ -37,7 +37,9 @@ import io.druid.segment.column.ColumnCapabilities;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -101,53 +103,54 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
   }
 
   @Override
-  protected Integer addToFacts(
+  protected AddToFactsResult addToFacts(
       AggregatorFactory[] metrics,
       boolean deserializeComplexMetrics,
       boolean reportParseExceptions,
       InputRow row,
       AtomicInteger numEntries,
-      TimeAndDims key,
+      IncrementalIndexRow key,
       ThreadLocal<InputRow> rowContainer,
       Supplier<InputRow> rowSupplier,
       boolean skipMaxRowsInMemoryCheck
   ) throws IndexSizeExceededException
   {
+    List<String> parseExceptionMessages;
     final int priorIndex = facts.getPriorIndex(key);
 
     Aggregator[] aggs;
 
-    if (TimeAndDims.EMPTY_ROW_INDEX != priorIndex) {
+    if (IncrementalIndexRow.EMPTY_ROW_INDEX != priorIndex) {
       aggs = concurrentGet(priorIndex);
-      doAggregate(metrics, aggs, rowContainer, row, reportParseExceptions);
+      parseExceptionMessages = doAggregate(metrics, aggs, rowContainer, row);
     } else {
       aggs = new Aggregator[metrics.length];
       factorizeAggs(metrics, aggs, rowContainer, row);
-      doAggregate(metrics, aggs, rowContainer, row, reportParseExceptions);
+      parseExceptionMessages = doAggregate(metrics, aggs, rowContainer, row);
 
       final int rowIndex = indexIncrement.getAndIncrement();
       concurrentSet(rowIndex, aggs);
 
       // Last ditch sanity checks
       if (numEntries.get() >= maxRowCount
-          && facts.getPriorIndex(key) == TimeAndDims.EMPTY_ROW_INDEX
+          && facts.getPriorIndex(key) == IncrementalIndexRow.EMPTY_ROW_INDEX
           && !skipMaxRowsInMemoryCheck) {
         throw new IndexSizeExceededException("Maximum number of rows [%d] reached", maxRowCount);
       }
       final int prev = facts.putIfAbsent(key, rowIndex);
-      if (TimeAndDims.EMPTY_ROW_INDEX == prev) {
+      if (IncrementalIndexRow.EMPTY_ROW_INDEX == prev) {
         numEntries.incrementAndGet();
       } else {
         // We lost a race
         aggs = concurrentGet(prev);
-        doAggregate(metrics, aggs, rowContainer, row, reportParseExceptions);
+        parseExceptionMessages = doAggregate(metrics, aggs, rowContainer, row);
         // Free up the misfire
         concurrentRemove(rowIndex);
         // This is expected to occur ~80% of the time in the worst scenarios
       }
     }
 
-    return numEntries.get();
+    return new AddToFactsResult(numEntries.get(), parseExceptionMessages);
   }
 
   @Override
@@ -171,14 +174,14 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
     rowContainer.set(null);
   }
 
-  private void doAggregate(
+  private List<String> doAggregate(
       AggregatorFactory[] metrics,
       Aggregator[] aggs,
       ThreadLocal<InputRow> rowContainer,
-      InputRow row,
-      boolean reportParseExceptions
+      InputRow row
   )
   {
+    List<String> parseExceptionMessages = new ArrayList<>();
     rowContainer.set(row);
 
     for (int i = 0; i < aggs.length; i++) {
@@ -189,16 +192,14 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
         }
         catch (ParseException e) {
           // "aggregate" can throw ParseExceptions if a selector expects something but gets something else.
-          if (reportParseExceptions) {
-            throw new ParseException(e, "Encountered parse error for aggregator[%s]", metrics[i].getName());
-          } else {
-            log.debug(e, "Encountered parse error, skipping aggregator[%s].", metrics[i].getName());
-          }
+          log.debug(e, "Encountered parse error, skipping aggregator[%s].", metrics[i].getName());
+          parseExceptionMessages.add(e.getMessage());
         }
       }
     }
 
     rowContainer.set(null);
+    return parseExceptionMessages;
   }
 
   private void closeAggregators()

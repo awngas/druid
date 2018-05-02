@@ -63,6 +63,7 @@ import io.druid.segment.IndexSpec;
 import io.druid.segment.QueryableIndex;
 import io.druid.segment.QueryableIndexSegment;
 import io.druid.segment.Segment;
+import io.druid.segment.incremental.IncrementalIndexAddResult;
 import io.druid.segment.incremental.IndexSizeExceededException;
 import io.druid.segment.indexing.DataSchema;
 import io.druid.segment.loading.DataSegmentPusher;
@@ -218,9 +219,11 @@ public class AppenderatorImpl implements Appenderator
     metrics.reportMessageMaxTimestamp(row.getTimestampFromEpoch());
     final int sinkRowsInMemoryBeforeAdd = sink.getNumRowsInMemory();
     final int sinkRowsInMemoryAfterAdd;
+    final IncrementalIndexAddResult addResult;
 
     try {
-      sinkRowsInMemoryAfterAdd = sink.add(row, !allowIncrementalPersists);
+      addResult = sink.add(row, !allowIncrementalPersists);
+      sinkRowsInMemoryAfterAdd = addResult.getRowCount();
     }
     catch (IndexSizeExceededException e) {
       // Uh oh, we can't do anything about this! We can't persist (commit metadata would be out of sync) and we
@@ -250,7 +253,7 @@ public class AppenderatorImpl implements Appenderator
       }
     }
 
-    return new AppenderatorAddResult(identifier, sink.getNumRows(), isPersistRequired);
+    return new AppenderatorAddResult(identifier, sink.getNumRows(), isPersistRequired, addResult.getParseException());
   }
 
   @Override
@@ -506,7 +509,8 @@ public class AppenderatorImpl implements Appenderator
   @Override
   public ListenableFuture<SegmentsAndMetadata> push(
       final Collection<SegmentIdentifier> identifiers,
-      @Nullable final Committer committer
+      @Nullable final Committer committer,
+      final boolean useUniquePath
   )
   {
     final Map<SegmentIdentifier, Sink> theSinks = Maps.newHashMap();
@@ -530,7 +534,7 @@ public class AppenderatorImpl implements Appenderator
               continue;
             }
 
-            final DataSegment dataSegment = mergeAndPush(entry.getKey(), entry.getValue());
+            final DataSegment dataSegment = mergeAndPush(entry.getKey(), entry.getValue(), useUniquePath);
             if (dataSegment != null) {
               dataSegments.add(dataSegment);
             } else {
@@ -560,17 +564,13 @@ public class AppenderatorImpl implements Appenderator
    * Merge segment, push to deep storage. Should only be used on segments that have been fully persisted. Must only
    * be run in the single-threaded pushExecutor.
    *
-   * Note that this calls DataSegmentPusher.push() with replaceExisting == true which is appropriate for the indexing
-   * tasks it is currently being used for (local indexing and Kafka indexing). If this is going to be used by an
-   * indexing task type that requires replaceExisting == false, this setting will need to be pushed to the caller.
-   *
    * @param identifier sink identifier
    * @param sink       sink to push
+   * @param useUniquePath true if the segment should be written to a path with a unique identifier
    *
    * @return segment descriptor, or null if the sink is no longer valid
    */
-
-  private DataSegment mergeAndPush(final SegmentIdentifier identifier, final Sink sink)
+  private DataSegment mergeAndPush(final SegmentIdentifier identifier, final Sink sink, final boolean useUniquePath)
   {
     // Bail out if this sink is null or otherwise not what we expect.
     if (sinks.get(identifier) != sink) {
@@ -642,17 +642,12 @@ public class AppenderatorImpl implements Appenderator
       // Retry pushing segments because uploading to deep storage might fail especially for cloud storage types
       final DataSegment segment = RetryUtils.retry(
           // The appenderator is currently being used for the local indexing task and the Kafka indexing task. For the
-          // Kafka indexing task, pushers MUST overwrite any existing objects in deep storage with the same identifier
-          // in order to maintain exactly-once semantics. If they do not and instead favor existing objects, in case of
-          // failure during publishing, the indexed data may not represent the checkpointed state and data loss or
-          // duplication may occur. See: https://github.com/druid-io/druid/issues/5161. The local indexing task does not
-          // support replicas where different tasks could generate segments with the same identifier but potentially
-          // different contents so it is okay if existing objects are overwritten. In both of these cases, we want to
-          // favor the most recently pushed segment so replaceExisting == true.
+          // Kafka indexing task, pushers must use unique file paths in deep storage in order to maintain exactly-once
+          // semantics.
           () -> dataSegmentPusher.push(
               mergedFile,
               sink.getSegment().withDimensions(IndexMerger.getMergedDimensionsFromQueryableIndexes(indexes)),
-              true
+              useUniquePath
           ),
           exception -> exception instanceof Exception,
           5
