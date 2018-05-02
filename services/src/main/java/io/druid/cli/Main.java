@@ -38,6 +38,7 @@ import java.util.ServiceLoader;
 public class Main
 {
   static {
+    // 使用java spi服务进行不同配置加载,检查未设置的属性是否正确配置
     ServiceLoader<PropertyChecker> serviceLoader = ServiceLoader.load(PropertyChecker.class);
     for (PropertyChecker propertyChecker : serviceLoader) {
       propertyChecker.checkProperties(System.getProperties());
@@ -47,10 +48,11 @@ public class Main
   @SuppressWarnings("unchecked")
   public static void main(String[] args)
   {
+    // 使用airline进行命令行的编译
     final Cli.CliBuilder<Runnable> builder = Cli.builder("druid");
 
     builder.withDescription("Druid command-line runner.")
-           .withDefaultCommand(Help.class)
+           .withDefaultCommand(Help.class) // 默认命令是help
            .withCommands(Help.class, Version.class);
 
     List<Class<? extends Runnable>> serverCommands = Arrays.asList(
