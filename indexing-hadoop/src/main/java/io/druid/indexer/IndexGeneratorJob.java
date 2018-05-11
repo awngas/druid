@@ -51,6 +51,7 @@ import io.druid.segment.QueryableIndex;
 import io.druid.segment.column.ColumnCapabilitiesImpl;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexSchema;
+import io.druid.segment.indexing.TuningConfigs;
 import io.druid.timeline.DataSegment;
 import io.druid.timeline.partition.NumberedShardSpec;
 import io.druid.timeline.partition.ShardSpec;
@@ -172,7 +173,7 @@ public class IndexGeneratorJob implements Jobby
       job.setMapperClass(IndexGeneratorMapper.class);
       job.setMapOutputValueClass(BytesWritable.class);
 
-      SortableBytes.useSortableBytesAsMapOutputKey(job);
+      SortableBytes.useSortableBytesAsMapOutputKey(job, IndexGeneratorPartitioner.class);
 
       int numReducers = Iterables.size(config.getAllBuckets().get());
       if (numReducers == 0) {
@@ -185,7 +186,6 @@ public class IndexGeneratorJob implements Jobby
       }
 
       job.setNumReduceTasks(numReducers);
-      job.setPartitionerClass(IndexGeneratorPartitioner.class);
 
       setReducerClass(job);
       job.setOutputKeyClass(BytesWritable.class);
@@ -288,6 +288,7 @@ public class IndexGeneratorJob implements Jobby
         .setIndexSchema(indexSchema)
         .setReportParseExceptions(!tuningConfig.isIgnoreInvalidRows())
         .setMaxRowCount(tuningConfig.getRowFlushBoundary())
+        .setMaxBytesInMemory(TuningConfigs.getMaxBytesInMemoryOrDefault(tuningConfig.getMaxBytesInMemory()))
         .buildOnheap();
 
     if (oldDimOrder != null && !indexSchema.getDimensionsSpec().hasCustomDimensions()) {
