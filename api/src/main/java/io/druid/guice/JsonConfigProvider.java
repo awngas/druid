@@ -34,6 +34,7 @@ import java.util.Properties;
 
 
 /**
+ * 从guice中绑定的Properties 提供一个类型T的单例值.
  * Provides a singleton value of type {@code <T>} from {@code Properties} bound in guice.
  * <br/>
  * <h3>Usage</h3>
