@@ -37,22 +37,26 @@ import java.util.Properties;
  * 从guice中绑定的Properties 提供一个类型T的单例值.
  * Provides a singleton value of type {@code <T>} from {@code Properties} bound in guice.
  * <br/>
- * <h3>Usage</h3>
+ * <h3>Usage 用法</h3>
  * To install this provider, bind it in your guice module, like below.
- *
+ * 若要创建这个Provider，请将其绑定到您的Guice模块中，如下所示
  * <pre>
  * JsonConfigProvider.bind(binder, "druid.server", DruidServerConfig.class);
  * </pre>
  * <br/>
  * In the above case, {@code druid.server} should be a key found in the {@code Properties} bound elsewhere.
  * The value of that key should directly relate to the fields in {@code DruidServerConfig.class}.
- *
+ * 在上面的例子中，druid.server应该是在Properties中找到的键，绑定到别处。
+ * 该键的值应该直接与DruidServerConfig.class中的字段相关。
  * <h3>Implementation</h3>
  * <br/>
  * The state of {@code <T>} is defined by the value of the property {@code propertyBase}.
  * This value is a json structure, decoded via {@link JsonConfigurator#configurate(Properties, String, Class)}.
+ * T的状态由属性propertyBase的值定义。
+ * 这个值是一个JSON结构，通过解码JsonConfigurator#configurate(Properties, String, Class)
  * <br/>
  *
+ * 如果DruidServerConfig.class是一个例子
  * An example might be if DruidServerConfig.class were
  *
  * <pre>
@@ -64,18 +68,20 @@ import java.util.Properties;
  * </pre>
  *
  * And your Properties object had in it
- *
+ * 你的Properties就在里面
  * <pre>
  *   druid.server.hostname=0.0.0.0
  *   druid.server.port=3333
  * </pre>
  *
  * Then this would bind a singleton instance of a DruidServerConfig object with hostname = "0.0.0.0" and port = 3333.
- *
+ * 然后，它将绑定一个DruidServerConfig的单例对象，其中hostname = "0.0.0.0" and port = 3333.
  * If the port weren't set in the properties, then the default of 8080 would be taken.  Essentially, it is the same as
  * subtracting the "druid.server" prefix from the properties and building a Map which is then passed into
  * ObjectMapper.convertValue()
  *
+ * 如果端口没有设置在properties中，那么默认值为8080。
+ * 本质上，它与从属性中减去"druid.server"前缀相同，然后构建一个映射，然后传递到ObjectMapper.convertValue()
  * @param <T> type of config object to provide.
  */
 @PublicApi
